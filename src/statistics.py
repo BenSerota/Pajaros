@@ -15,6 +15,7 @@ import pandas as pd
 from scipy.stats import (
     binomtest,
     chi2_contingency,
+    chisquare,
     fisher_exact,
     kruskal,
     norm,
@@ -880,3 +881,190 @@ def stat_badge(
     parts.append(f" &mdash; <em>{label}</em></span>")
 
     return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# 13. Chi-squared goodness-of-fit test
+# ---------------------------------------------------------------------------
+
+
+def chi_squared_gof(observed: np.ndarray, expected: np.ndarray = None) -> dict:
+    """Chi-squared goodness-of-fit test.
+
+    Tests whether observed counts differ from expected counts (uniform by
+    default).
+
+    Parameters
+    ----------
+    observed : np.ndarray
+        Observed counts per category.
+    expected : np.ndarray, optional
+        Expected counts. If ``None``, assumes uniform distribution.
+
+    Returns
+    -------
+    dict
+        Keys: statistic, p_value, dof.
+    """
+    obs = np.asarray(observed, dtype=float)
+    obs = obs[~np.isnan(obs)]
+
+    if len(obs) < 2 or obs.sum() == 0:
+        return {"statistic": np.nan, "p_value": np.nan, "dof": 0}
+
+    if expected is not None:
+        exp = np.asarray(expected, dtype=float)
+    else:
+        exp = None
+
+    try:
+        stat, p = chisquare(obs, f_exp=exp)
+    except Exception:
+        return {"statistic": np.nan, "p_value": np.nan, "dof": len(obs) - 1}
+
+    return {
+        "statistic": float(stat),
+        "p_value": float(p),
+        "dof": int(len(obs) - 1),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 14. Poisson rate comparison (E-test / conditional exact test)
+# ---------------------------------------------------------------------------
+
+
+def poisson_rate_test(
+    count1: int,
+    exposure1: float,
+    count2: int,
+    exposure2: float,
+) -> dict:
+    """Compare two Poisson rates using an exact conditional test.
+
+    Tests H0: rate1 == rate2, where rate = count / exposure.
+    Uses a binomial exact test on count1 given total = count1 + count2,
+    with expected proportion = exposure1 / (exposure1 + exposure2).
+
+    Parameters
+    ----------
+    count1 : int
+        Observed event count in group 1 (e.g., before period).
+    exposure1 : float
+        Exposure (e.g., months of observation) in group 1.
+    count2 : int
+        Observed event count in group 2 (e.g., after period).
+    exposure2 : float
+        Exposure in group 2.
+
+    Returns
+    -------
+    dict
+        Keys: rate1, rate2, rate_ratio, p_value, count1, count2,
+        exposure1, exposure2.
+    """
+    total = count1 + count2
+    if total == 0 or exposure1 <= 0 or exposure2 <= 0:
+        return {
+            "rate1": np.nan, "rate2": np.nan,
+            "rate_ratio": np.nan, "p_value": np.nan,
+            "count1": count1, "count2": count2,
+            "exposure1": exposure1, "exposure2": exposure2,
+        }
+
+    rate1 = count1 / exposure1
+    rate2 = count2 / exposure2
+    rate_ratio = rate1 / rate2 if rate2 > 0 else np.inf
+
+    # Conditional exact test: under H0 equal rates,
+    # P(X1 = count1 | X1 + X2 = total) ~ Binomial(total, p)
+    # where p = exposure1 / (exposure1 + exposure2)
+    p_null = exposure1 / (exposure1 + exposure2)
+    result = binomtest(count1, total, p_null, alternative="two-sided")
+
+    return {
+        "rate1": float(rate1),
+        "rate2": float(rate2),
+        "rate_ratio": float(rate_ratio),
+        "p_value": float(result.pvalue),
+        "count1": int(count1),
+        "count2": int(count2),
+        "exposure1": float(exposure1),
+        "exposure2": float(exposure2),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 15. Fisher pairwise with Bonferroni (from 2x2 tables)
+# ---------------------------------------------------------------------------
+
+
+def fisher_pairwise_from_counts(
+    group_labels: list,
+    group_counts: list,
+    total_counts: list = None,
+) -> pd.DataFrame:
+    """Pairwise Fisher exact tests between groups using count data.
+
+    Each group has a count of events and a total (or uses counts directly
+    for a chi-squared comparison).  Useful for comparing signal types.
+
+    Parameters
+    ----------
+    group_labels : list[str]
+        Names of the groups.
+    group_counts : list[int]
+        Event counts per group.
+    total_counts : list[int], optional
+        Total exposure per group.  If ``None``, uses counts as the basis
+        for chi-squared pairwise tests (2x1 tables expanded to 2x2 with
+        complement).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: group1, group2, odds_ratio, p_value, p_adjusted.
+    """
+    if len(group_labels) < 2:
+        return pd.DataFrame(columns=["group1", "group2", "odds_ratio", "p_value", "p_adjusted"])
+
+    results = []
+    pairs = list(combinations(range(len(group_labels)), 2))
+
+    for i, j in pairs:
+        if total_counts is not None:
+            # Build 2x2: [[event_i, non_event_i], [event_j, non_event_j]]
+            table = np.array([
+                [group_counts[i], total_counts[i] - group_counts[i]],
+                [group_counts[j], total_counts[j] - group_counts[j]],
+            ])
+            try:
+                odds, p = fisher_exact(table)
+            except Exception:
+                odds, p = np.nan, np.nan
+        else:
+            # Simple 2x2 from counts
+            table = np.array([
+                [group_counts[i], sum(group_counts) - group_counts[i]],
+                [group_counts[j], sum(group_counts) - group_counts[j]],
+            ])
+            try:
+                odds, p = fisher_exact(table)
+            except Exception:
+                odds, p = np.nan, np.nan
+
+        results.append({
+            "group1": group_labels[i],
+            "group2": group_labels[j],
+            "odds_ratio": odds,
+            "p_value": p,
+        })
+
+    df_out = pd.DataFrame(results)
+    n_tests = len(df_out)
+    if n_tests > 0:
+        df_out["p_adjusted"] = np.minimum(df_out["p_value"] * n_tests, 1.0)
+    else:
+        df_out["p_adjusted"] = np.nan
+
+    return df_out

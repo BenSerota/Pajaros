@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     COLUMN_MAP, SIGNAL_TYPE_NORM, SIGNAL_CONDITION_NORM,
     MUNICIPIO_NORM, LINE_META, MONTH_TO_SEASON,
+    UV_LINE, UV_VANOS_RAW, UV_INSTALL_DATE, UV_SIGNAL_LABEL,
 )
 
 
@@ -258,6 +259,17 @@ def derive_line_label(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def derive_vano_label(df: pd.DataFrame) -> pd.DataFrame:
+    """Create vano_label using pylon-to-pylon number as primary, span_id as fallback."""
+    if "vano_raw_2" in df.columns:
+        df["vano_label"] = df["vano_raw_2"].fillna(df.get("span_id"))
+    elif "span_id" in df.columns:
+        df["vano_label"] = df["span_id"]
+    else:
+        df["vano_label"] = np.nan
+    return df
+
+
 def clean_data(filepath: Path) -> pd.DataFrame:
     """
     Full cleaning pipeline: load → rename → parse → normalize → derive.
@@ -271,6 +283,18 @@ def clean_data(filepath: Path) -> pd.DataFrame:
     df = derive_line_metadata(df)
     df = derive_conservation_score(df)
     df = derive_line_label(df)
+
+    # UV signal classification — override signal_type for UV vanos on GT-MB 132kV
+    uv_install = pd.Timestamp(UV_INSTALL_DATE)
+    if "vano_raw_2" in df.columns:
+        uv_mask = (
+            (df["line"] == UV_LINE)
+            & (df["vano_raw_2"].isin(UV_VANOS_RAW))
+            & (df["date"] >= uv_install)
+        )
+        df.loc[uv_mask, "signal_type"] = UV_SIGNAL_LABEL
+
+    df = derive_vano_label(df)
 
     # Ensure numeric columns are proper types
     for col in ["utm_x", "utm_y", "observer_distance_m", "signal_spacing_m", "specimen_count"]:

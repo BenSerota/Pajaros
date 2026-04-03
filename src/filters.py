@@ -154,18 +154,6 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
     # ------------------------------------------------------------------
     st.sidebar.subheader("Evento")
 
-    # Tipo de evento
-    if "event_type" in df.columns:
-        event_choice = st.sidebar.radio(
-            "Tipo de evento",
-            options=["Todos", "Accidente", "Incidente"],
-            index=0,
-            key="filter_event_type",
-            horizontal=True,
-        )
-        if event_choice != "Todos":
-            filtered = filtered[filtered["event_type"] == event_choice]
-
     # Estado de conservación
     if "iucn_status" in df.columns:
         iucn_options = sorted(
@@ -258,12 +246,6 @@ def get_filter_summary(df_filtered: pd.DataFrame, df_full: pd.DataFrame) -> str:
                 parts.append(", ".join(sorted(filt_lines)))
             else:
                 parts.append(f"{len(filt_lines)} de {len(full_lines)} líneas")
-
-    # Tipo de evento
-    if "event_type" in df_filtered.columns:
-        events = df_filtered["event_type"].dropna().unique()
-        if len(events) == 1:
-            parts.append(events[0])
 
     # Patrón de actividad
     if "activity_pattern" in df_filtered.columns:

@@ -105,7 +105,7 @@ COLUMN_MAP = {
 COLUMNS_KEEP = [
     "company", "study", "line", "event_type", "causante", "impact_type",
     "date", "date_local", "tipologia", "provincia", "municipio", "paraje",
-    "observer", "span_id", "nearest_pylon", "remains_position",
+    "observer", "vano_raw_2", "span_id", "nearest_pylon", "remains_position",
     "utm_x", "utm_y", "coord_system",
     "observer_distance_m", "relative_size",
     "signal_spacing_m", "signal_condition", "accident_zone",
@@ -126,7 +126,7 @@ SIGNAL_TYPE_NORM = {
     "Espirales": "Espirales Amarillas",              # merge single record
     "Sin Señalización": "Sin Señalización",
 }
-SIGNAL_TYPES_ORDERED = ["Triple Aspa", "Aspa Corta", "Espirales Amarillas", "Sin Señalización"]
+SIGNAL_TYPES_ORDERED = ["Triple Aspa", "Aspa Corta", "Espirales Amarillas", "Sin Señalización", "UV (Ultravioleta)"]
 
 # ── Signal Condition ─────────────────────────────────────────────────────────
 SIGNAL_CONDITION_NORM = {
@@ -219,6 +219,7 @@ COLORS = {
     "Aspa Corta": "#388E3C",
     "Espirales Amarillas": "#FBC02D",
     "Sin Señalización": "#9E9E9E",
+    "UV (Ultravioleta)": "#7B1FA2",
 
     # Conservation status
     "En peligro de extinción": "#B71C1C",
@@ -283,6 +284,13 @@ MONTH_TO_SEASON = {
     7: "Verano", 8: "Verano", 9: "Otoño",
     10: "Otoño", 11: "Otoño", 12: "Invierno",
 }
+
+# ── UV Signal Configuration ──────────────────────────────────────────────────
+UV_LINE = "L/Gran Tarajal-Matas Blancas 132 kV"
+UV_LINE_LABEL = "GT–MB 132kV"
+UV_VANOS_RAW = ["89-90", "90-91", "91-92"]  # pylon-to-pylon numbers
+UV_INSTALL_DATE = "2024-06-01"
+UV_SIGNAL_LABEL = "UV (Ultravioleta)"
 
 # ── Dashboard Layout ─────────────────────────────────────────────────────────
 PAGE_ICON = "\U0001F985"  # eagle emoji

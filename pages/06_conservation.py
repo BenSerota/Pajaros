@@ -13,10 +13,17 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import COLORS, CHART_HEIGHT, CHART_TEMPLATE, SOURCE_ANNOTATION, MAP_CENTER_LAT, MAP_CENTER_LON
+from config import COLORS, CHART_TEMPLATE, SOURCE_ANNOTATION, MAP_CENTER_LAT, MAP_CENTER_LON
 from src.data_loader import load_data
 from src.filters import apply_filters, get_filter_summary
 from src.statistics import binomial_test, stat_badge, format_p_value
+
+# -- Constantes de diseno -----------------------------------------------------
+CHART_MARGINS = dict(l=20, r=20, t=40, b=60)
+CHART_H_DEFAULT = 450
+CHART_H_MAP = 500
+CHART_H_BUBBLE = 550
+CHART_H_SMALL = 350
 
 # -- Configuracion de pagina --------------------------------------------------
 st.header("Impacto en Conservacion")
@@ -77,7 +84,7 @@ with col5:
 st.divider()
 
 # =============================================================================
-# SECCION 2: Tabla de Prioridad de Conservacion
+# SECCION 2: Tabla de Prioridad de Conservacion (full-width)
 # =============================================================================
 st.subheader("Tabla de Prioridad de Conservacion")
 st.caption("Todas las especies con puntuacion de conservacion > 0, ordenadas por prioridad")
@@ -107,6 +114,7 @@ if len(df_conserv) > 0:
         priority_table,
         use_container_width=True,
         hide_index=True,
+        height=400,
         column_config={
             "Puntuacion de Conservacion": st.column_config.NumberColumn(format="%.1f"),
             "Victimas": st.column_config.NumberColumn(format="%d"),
@@ -118,7 +126,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 3: Analisis Detallado: Avutarda Hubara
+# SECCION 3: Analisis Detallado: Avutarda Hubara (map full-width 500px)
 # =============================================================================
 st.subheader("Analisis Detallado: Avutarda Hubara (*Chlamydotis undulata*)")
 st.warning(
@@ -132,7 +140,7 @@ houbara_mask = df["species_scientific"].str.contains("Chlamydotis", case=False, 
 df_houbara = df[houbara_mask].copy()
 
 if len(df_houbara) > 0:
-    # Mapa de victimas de Hubara
+    # Mapa de victimas de Hubara (full-width, 500px)
     df_houbara_map = df_houbara.dropna(subset=["latitude", "longitude"])
     if len(df_houbara_map) > 0:
         fig_houbara_map = px.scatter_mapbox(
@@ -144,43 +152,47 @@ if len(df_houbara) > 0:
             mapbox_style="carto-positron",
             zoom=9,
             center={"lat": MAP_CENTER_LAT, "lon": MAP_CENTER_LON},
-            height=450,
+            height=CHART_H_MAP,
         )
         fig_houbara_map.update_layout(
             margin=dict(l=0, r=0, t=10, b=10),
         )
         st.plotly_chart(fig_houbara_map, use_container_width=True)
 
-    # Linea temporal: dispersion de victimas de Hubara por fecha
-    col_timeline, col_table = st.columns([1, 1])
+    # Linea temporal (full-width)
+    st.markdown("**Victimas de Hubara a lo largo del tiempo**")
+    fig_timeline = px.scatter(
+        df_houbara,
+        x="date",
+        y="line_label",
+        color_discrete_sequence=[COLORS["En peligro de extincion"]],
+        hover_data=["signal_type", "event_type", "zone"],
+        template=CHART_TEMPLATE,
+        height=CHART_H_SMALL,
+        labels={"date": "Fecha", "line_label": "Linea electrica"},
+    )
+    fig_timeline.update_traces(marker=dict(size=12, symbol="x"))
+    fig_timeline.update_layout(
+        margin=CHART_MARGINS,
+        showlegend=False,
+        title_font_size=16,
+        hovermode="closest",
+    )
+    fig_timeline.add_annotation(
+        text=SOURCE_ANNOTATION,
+        xref="paper", yref="paper", x=0, y=-0.12,
+        showarrow=False, font=dict(size=10, color="gray"),
+    )
+    st.plotly_chart(fig_timeline, use_container_width=True)
 
-    with col_timeline:
-        st.markdown("**Victimas de Hubara a lo largo del tiempo**")
-        fig_timeline = px.scatter(
-            df_houbara,
-            x="date",
-            y="line_label",
-            color_discrete_sequence=[COLORS["En peligro de extincion"]],
-            hover_data=["signal_type", "event_type", "zone"],
-            template=CHART_TEMPLATE,
-            height=300,
-            labels={"date": "Fecha", "line_label": "Linea electrica"},
-        )
-        fig_timeline.update_traces(marker=dict(size=12, symbol="x"))
-        fig_timeline.update_layout(
-            margin=dict(l=0, r=20, t=10, b=10),
-            showlegend=False,
-        )
-        st.plotly_chart(fig_timeline, use_container_width=True)
-
-    with col_table:
-        st.markdown("**Todos los registros de Hubara**")
-        display_cols = ["date", "line_label", "signal_type", "event_type", "zone", "sex", "age"]
-        available_cols = [c for c in display_cols if c in df_houbara.columns]
-        houbara_display = df_houbara[available_cols].copy()
-        if "date" in houbara_display.columns:
-            houbara_display["date"] = houbara_display["date"].dt.strftime("%Y-%m-%d")
-        st.dataframe(houbara_display, use_container_width=True, hide_index=True)
+    # Tabla de registros (full-width)
+    st.markdown("**Todos los registros de Hubara**")
+    display_cols = ["date", "line_label", "signal_type", "event_type", "zone", "sex", "age"]
+    available_cols = [c for c in display_cols if c in df_houbara.columns]
+    houbara_display = df_houbara[available_cols].copy()
+    if "date" in houbara_display.columns:
+        houbara_display["date"] = houbara_display["date"].dt.strftime("%Y-%m-%d")
+    st.dataframe(houbara_display, use_container_width=True, hide_index=True, height=400)
 
     st.info(
         f"**{len(df_houbara)} victimas** representan una mortalidad significativa para una pequena "
@@ -213,18 +225,18 @@ if len(df_vulture) > 0:
     vulture_display = df_vulture[available_cols].copy()
     if "date" in vulture_display.columns:
         vulture_display["date"] = vulture_display["date"].dt.strftime("%Y-%m-%d")
-    st.dataframe(vulture_display, use_container_width=True, hide_index=True)
+    st.dataframe(vulture_display, use_container_width=True, hide_index=True, height=400)
 else:
     st.info("No hay registros de Alimoche comun en la seleccion de filtros actual.")
 
 st.divider()
 
 # =============================================================================
-# SECCION 5: Mortalidad de Aves Marinas Nocturnas
+# SECCION 5: Mortalidad de Aves Marinas Nocturnas (full-width charts)
 # =============================================================================
 st.subheader("Mortalidad de Aves Marinas Nocturnas")
 st.caption(
-    "Las aves marinas Procellariiformes (pardelas, petreles, paiños) son estrictamente nocturnas "
+    "Las aves marinas Procellariiformes (pardelas, petreles, painos) son estrictamente nocturnas "
     "en tierra y fuertemente atraidas por la luz artificial. No pueden ver las marcas anticolision "
     "visuales durante la noche."
 )
@@ -248,82 +260,93 @@ if len(df_seabirds) > 0:
     with col_s3:
         st.metric("Especies de aves marinas unicas", seabird_species)
 
-    col_seasonal, col_signal = st.columns(2)
+    # Grafico de barras estacional (full-width)
+    st.markdown("**Distribucion mensual de victimas de aves marinas**")
+    month_names = {
+        1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic",
+    }
+    seabird_months = (
+        df_seabirds.groupby("month")
+        .size()
+        .reindex(range(1, 13), fill_value=0)
+        .reset_index()
+    )
+    seabird_months.columns = ["month", "count"]
+    seabird_months["month_name"] = seabird_months["month"].map(month_names)
 
-    # Grafico de barras estacional (distribucion mensual)
-    with col_seasonal:
-        st.markdown("**Distribucion mensual de victimas de aves marinas**")
-        month_names = {
-            1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May", 6: "Jun",
-            7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic",
-        }
-        seabird_months = (
-            df_seabirds.groupby("month")
-            .size()
-            .reindex(range(1, 13), fill_value=0)
-            .reset_index()
-        )
-        seabird_months.columns = ["month", "count"]
-        seabird_months["month_name"] = seabird_months["month"].map(month_names)
+    fig_seasonal = px.bar(
+        seabird_months,
+        x="month_name",
+        y="count",
+        template=CHART_TEMPLATE,
+        height=CHART_H_DEFAULT,
+        labels={"month_name": "", "count": "Victimas aves marinas"},
+        color="count",
+        color_continuous_scale="Blues",
+    )
+    fig_seasonal.update_layout(
+        margin=CHART_MARGINS,
+        coloraxis_showscale=False,
+        title_font_size=16,
+        hovermode="x unified",
+    )
+    fig_seasonal.update_traces(text=seabird_months["count"], textposition="outside")
+    fig_seasonal.add_annotation(
+        text=f"{SOURCE_ANNOTATION} | n={seabird_total:,}",
+        xref="paper", yref="paper", x=0, y=-0.1,
+        showarrow=False, font=dict(size=10, color="gray"),
+    )
+    st.plotly_chart(fig_seasonal, use_container_width=True)
 
-        fig_seasonal = px.bar(
-            seabird_months,
-            x="month_name",
-            y="count",
-            template=CHART_TEMPLATE,
-            height=350,
-            labels={"month_name": "", "count": "Victimas aves marinas"},
-            color="count",
-            color_continuous_scale="Blues",
-        )
-        fig_seasonal.update_layout(
-            margin=dict(l=0, r=20, t=10, b=10),
-            coloraxis_showscale=False,
-        )
-        fig_seasonal.update_traces(text=seabird_months["count"], textposition="outside")
-        st.plotly_chart(fig_seasonal, use_container_width=True)
+    st.divider()
 
-    # Tipo de senalizacion: aves marinas vs resto de especies
-    with col_signal:
-        st.markdown("**Distribucion por tipo de senalizacion: aves marinas vs otras especies**")
-        df_other = df[~seabird_mask].copy()
+    # Tipo de senalizacion: aves marinas vs resto (full-width)
+    st.markdown("**Distribucion por tipo de senalizacion: aves marinas vs otras especies**")
+    df_other = df[~seabird_mask].copy()
 
-        seabird_sig = (
-            df_seabirds[df_seabirds["signal_type"].notna()]
-            .groupby("signal_type").size()
-            .reset_index(name="count")
-        )
-        seabird_sig["group"] = "Aves marinas"
+    seabird_sig = (
+        df_seabirds[df_seabirds["signal_type"].notna()]
+        .groupby("signal_type").size()
+        .reset_index(name="count")
+    )
+    seabird_sig["group"] = "Aves marinas"
 
-        other_sig = (
-            df_other[df_other["signal_type"].notna()]
-            .groupby("signal_type").size()
-            .reset_index(name="count")
-        )
-        other_sig["group"] = "Otras especies"
+    other_sig = (
+        df_other[df_other["signal_type"].notna()]
+        .groupby("signal_type").size()
+        .reset_index(name="count")
+    )
+    other_sig["group"] = "Otras especies"
 
-        sig_combined = pd.concat([seabird_sig, other_sig], ignore_index=True)
+    sig_combined = pd.concat([seabird_sig, other_sig], ignore_index=True)
 
-        # Normalizar a proporciones dentro de cada grupo
-        group_totals = sig_combined.groupby("group")["count"].transform("sum")
-        sig_combined["proportion"] = sig_combined["count"] / group_totals * 100
+    group_totals = sig_combined.groupby("group")["count"].transform("sum")
+    sig_combined["proportion"] = sig_combined["count"] / group_totals * 100
 
-        fig_signal_cmp = px.bar(
-            sig_combined,
-            x="signal_type",
-            y="proportion",
-            color="group",
-            barmode="group",
-            template=CHART_TEMPLATE,
-            height=350,
-            labels={"signal_type": "", "proportion": "% del grupo", "group": ""},
-            color_discrete_map={"Aves marinas": COLORS["Nocturna"], "Otras especies": "#BDBDBD"},
-        )
-        fig_signal_cmp.update_layout(
-            margin=dict(l=0, r=20, t=10, b=10),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        )
-        st.plotly_chart(fig_signal_cmp, use_container_width=True)
+    fig_signal_cmp = px.bar(
+        sig_combined,
+        x="signal_type",
+        y="proportion",
+        color="group",
+        barmode="group",
+        template=CHART_TEMPLATE,
+        height=CHART_H_DEFAULT,
+        labels={"signal_type": "", "proportion": "% del grupo", "group": ""},
+        color_discrete_map={"Aves marinas": COLORS["Nocturna"], "Otras especies": "#BDBDBD"},
+    )
+    fig_signal_cmp.update_layout(
+        margin=CHART_MARGINS,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        title_font_size=16,
+        hovermode="x unified",
+    )
+    fig_signal_cmp.add_annotation(
+        text=SOURCE_ANNOTATION,
+        xref="paper", yref="paper", x=0, y=-0.1,
+        showarrow=False, font=dict(size=10, color="gray"),
+    )
+    st.plotly_chart(fig_signal_cmp, use_container_width=True)
 
     st.info(
         "**Mensaje clave:** Las aves marinas nocturnas no pueden ver las marcas anticolision visuales. "
@@ -336,7 +359,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 6: Matriz de Prioridad de Conservacion
+# SECCION 6: Matriz de Prioridad de Conservacion (full-width, 550px)
 # =============================================================================
 st.subheader("Matriz de Prioridad de Conservacion")
 st.caption("Las especies en el cuadrante superior derecho son las de mayor prioridad para mitigacion")
@@ -353,7 +376,6 @@ if "conservation_score" in df.columns and "activity_pattern" in df.columns:
     )
 
     if len(bubble_data) > 0:
-        # Anadir etiquetas de texto para especies de alta prioridad
         bubble_data["label"] = bubble_data.apply(
             lambda r: r["species_clean"].split(" / ")[0] if r["conservation_score"] > 3 else "",
             axis=1,
@@ -376,7 +398,7 @@ if "conservation_score" in df.columns and "activity_pattern" in df.columns:
             text="label",
             hover_data=["species_clean", "kills", "conservation_score"],
             template=CHART_TEMPLATE,
-            height=CHART_HEIGHT,
+            height=CHART_H_BUBBLE,
             labels={
                 "kills": "Numero de victimas",
                 "conservation_score": "Puntuacion de conservacion",
@@ -388,12 +410,14 @@ if "conservation_score" in df.columns and "activity_pattern" in df.columns:
             textfont=dict(size=10),
         )
         fig_bubble.update_layout(
-            margin=dict(l=0, r=20, t=10, b=40),
+            margin=CHART_MARGINS,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            title_font_size=16,
+            hovermode="closest",
         )
         fig_bubble.add_annotation(
             text=SOURCE_ANNOTATION,
-            xref="paper", yref="paper", x=0, y=-0.12,
+            xref="paper", yref="paper", x=0, y=-0.1,
             showarrow=False, font=dict(size=10, color="gray"),
         )
         st.plotly_chart(fig_bubble, use_container_width=True)

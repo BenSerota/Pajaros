@@ -13,10 +13,17 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import COLORS, CHART_HEIGHT, CHART_TEMPLATE, SOURCE_ANNOTATION
+from config import COLORS, CHART_TEMPLATE, SOURCE_ANNOTATION
 from src.data_loader import load_data
 from src.filters import apply_filters, get_filter_summary
 from src.statistics import chi_squared_test, stat_badge, format_p_value
+
+# -- Constantes de diseno -----------------------------------------------------
+CHART_MARGINS = dict(l=20, r=20, t=40, b=60)
+CHART_H_DEFAULT = 450
+CHART_H_TREEMAP = 550
+CHART_H_SUNBURST = 550
+CHART_H_SMALL = 350
 
 # -- Configuracion de pagina --------------------------------------------------
 st.header("Analisis de Especies")
@@ -32,7 +39,7 @@ if total == 0:
     st.warning("Ningun registro coincide con los filtros actuales. Ajuste los filtros para ver resultados.")
     st.stop()
 
-# -- Mapa de colores por patron de actividad (reutilizado en todas las secciones)
+# -- Mapa de colores por patron de actividad
 ACTIVITY_COLOR_MAP = {
     "Nocturna": COLORS.get("Nocturna", "#1a237e"),
     "Crepuscular": COLORS.get("Crepuscular", "#6a1b9a"),
@@ -41,7 +48,7 @@ ACTIVITY_COLOR_MAP = {
 }
 
 # =============================================================================
-# SECCION 1: Mapa de Arbol de Especies
+# SECCION 1: Mapa de Arbol de Especies (full-width, 550px)
 # =============================================================================
 st.subheader("1. Mapa de Arbol de Especies")
 st.caption(
@@ -64,10 +71,11 @@ if "species_genus" in df.columns and "species_clean" in df.columns:
             color="activity_pattern",
             color_discrete_map=ACTIVITY_COLOR_MAP,
             template=CHART_TEMPLATE,
-            height=CHART_HEIGHT + 50,
+            height=CHART_H_TREEMAP,
         )
         fig_tree.update_layout(
-            margin=dict(l=10, r=10, t=30, b=40),
+            margin=CHART_MARGINS,
+            title_font_size=16,
         )
         fig_tree.update_traces(
             hovertemplate="<b>%{label}</b><br>Victimas: %{value}<extra></extra>",
@@ -86,7 +94,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 2: Resumen por Patron de Actividad (KPI + Sunburst)
+# SECCION 2: Resumen por Patron de Actividad (KPIs + Sunburst full-width 550px)
 # =============================================================================
 st.subheader("2. Resumen por Patron de Actividad")
 st.caption("Cuando son mas activas las especies afectadas? El predominio nocturno sugiere que las marcas visuales pueden ser insuficientes.")
@@ -94,7 +102,7 @@ st.caption("Cuando son mas activas las especies afectadas? El predominio nocturn
 if "activity_pattern" in df.columns:
     activity_counts = df["activity_pattern"].value_counts()
 
-    # -- Fila de KPIs --------------------------------------------------------
+    # -- Fila de KPIs
     kpi_patterns = ["Nocturna", "Crepuscular", "Diurna"]
     kpi_labels = {
         "Nocturna": "Victimas nocturnas",
@@ -114,7 +122,7 @@ if "activity_pattern" in df.columns:
                 delta_color="off",
             )
 
-    # -- Sunburst -------------------------------------------------------------
+    # -- Sunburst (full-width, 550px)
     sunburst_df = (
         df.groupby(["activity_pattern", "species_clean"])
         .size()
@@ -129,10 +137,11 @@ if "activity_pattern" in df.columns:
             color="activity_pattern",
             color_discrete_map=ACTIVITY_COLOR_MAP,
             template=CHART_TEMPLATE,
-            height=CHART_HEIGHT + 50,
+            height=CHART_H_SUNBURST,
         )
         fig_sun.update_layout(
-            margin=dict(l=10, r=10, t=10, b=40),
+            margin=CHART_MARGINS,
+            title_font_size=16,
         )
         fig_sun.add_annotation(
             text=f"{SOURCE_ANNOTATION} | n={total:,}",
@@ -148,7 +157,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 3: Perfil de Colision Nocturna
+# SECCION 3: Perfil de Colision Nocturna vs Diurna (side-by-side bars, chi2 badge below)
 # =============================================================================
 st.subheader("3. Perfil de Colision Nocturna vs Diurna")
 st.caption(
@@ -182,20 +191,27 @@ if "activity_pattern" in df.columns:
                     y="species_clean",
                     orientation="h",
                     template=CHART_TEMPLATE,
-                    height=350,
+                    height=CHART_H_SMALL,
                     labels={"count": "Victimas", "species_clean": ""},
                 )
                 fig_bar.update_traces(marker_color=bar_color)
                 fig_bar.update_layout(
                     showlegend=False,
-                    margin=dict(l=0, r=10, t=10, b=10),
+                    margin=dict(l=20, r=20, t=20, b=20),
+                    title_font_size=16,
+                    hovermode="x unified",
+                )
+                fig_bar.add_annotation(
+                    text=SOURCE_ANNOTATION,
+                    xref="paper", yref="paper", x=0, y=-0.12,
+                    showarrow=False, font=dict(size=10, color="gray"),
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
                 st.caption(f"n = {len(subset):,}")
             else:
                 st.info(f"No hay registros de especies {pattern.lower()}s.")
 
-    # -- Chi-cuadrado: activity_pattern x signal_type ------------------------
+    # -- Chi-cuadrado badge BELOW charts
     if "signal_type" in df.columns:
         df_test = df[
             df["activity_pattern"].isin(["Nocturna", "Crepuscular", "Diurna"])
@@ -215,13 +231,13 @@ if "activity_pattern" in df.columns:
                 )
                 st.markdown(badge_html, unsafe_allow_html=True)
 
-                with st.expander("Tabla de contingencia: Patron de Actividad x Tipo de Senalizacion"):
-                    st.dataframe(ct_activity_signal, use_container_width=True)
-                    st.markdown(f"""
-                    - **chi-cuadrado** = {result['statistic']:.2f}, gl = {result['dof']}
-                    - **p** = {format_p_value(result['p_value'])}
-                    - **V de Cramer** = {result['effect_size']:.3f}
-                    """)
+                st.markdown("**Tabla de contingencia: Patron de Actividad x Tipo de Senalizacion**")
+                st.dataframe(ct_activity_signal, use_container_width=True)
+                st.markdown(f"""
+                - **chi-cuadrado** = {result['statistic']:.2f}, gl = {result['dof']}
+                - **p** = {format_p_value(result['p_value'])}
+                - **V de Cramer** = {result['effect_size']:.3f}
+                """)
             else:
                 st.info("No hay suficientes categorias para la prueba chi-cuadrado.")
         else:
@@ -230,7 +246,7 @@ if "activity_pattern" in df.columns:
 st.divider()
 
 # =============================================================================
-# SECCION 4: Curva de Acumulacion de Especies
+# SECCION 4: Curva de Acumulacion de Especies (full-width)
 # =============================================================================
 st.subheader("4. Curva de Acumulacion de Especies")
 st.caption(
@@ -258,7 +274,7 @@ if "date" in df.columns and "species_clean" in df.columns:
             x="record_number",
             y="cumulative_species",
             template=CHART_TEMPLATE,
-            height=CHART_HEIGHT,
+            height=CHART_H_DEFAULT,
             labels={
                 "record_number": "Numero de registro (orden cronologico)",
                 "cumulative_species": "Especies unicas acumuladas",
@@ -270,10 +286,11 @@ if "date" in df.columns and "species_clean" in df.columns:
             fillcolor="rgba(211, 47, 47, 0.08)",
         )
         fig_accum.update_layout(
-            margin=dict(l=0, r=20, t=10, b=40),
+            margin=CHART_MARGINS,
+            title_font_size=16,
+            hovermode="x unified",
         )
 
-        # Anotar el recuento final de especies
         final_count = cumulative[-1] if cumulative else 0
         fig_accum.add_annotation(
             text=f"{final_count} especies detectadas",
@@ -286,7 +303,7 @@ if "date" in df.columns and "species_clean" in df.columns:
 
         fig_accum.add_annotation(
             text=f"{SOURCE_ANNOTATION} | n={len(df_sorted):,}",
-            xref="paper", yref="paper", x=0, y=-0.12,
+            xref="paper", yref="paper", x=0, y=-0.1,
             showarrow=False, font=dict(size=10, color="gray"),
         )
         st.plotly_chart(fig_accum, use_container_width=True)
@@ -313,19 +330,17 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 5: Mapa de Calor Especie x Linea
+# SECCION 5: Mapa de Calor Especie x Linea (full-width)
 # =============================================================================
 st.subheader("5. Mapa de Calor Especie x Linea")
 st.caption("Que especies mueren en que lineas — revela zonificacion ecologica y asociaciones de habitat.")
 
 if "species_clean" in df.columns and "line_label" in df.columns:
-    # Top 15 especies por recuento total
     top15 = df["species_clean"].value_counts().head(15).index.tolist()
     df_top = df[df["species_clean"].isin(top15)]
 
     if len(df_top) > 0:
         heatmap_ct = pd.crosstab(df_top["species_clean"], df_top["line_label"])
-        # Reordenar filas por recuento total descendente
         row_order = (
             df_top["species_clean"]
             .value_counts()
@@ -341,16 +356,17 @@ if "species_clean" in df.columns and "line_label" in df.columns:
             y=heatmap_ct.index.tolist(),
             color_continuous_scale="Viridis",
             template=CHART_TEMPLATE,
-            height=max(CHART_HEIGHT, len(top15) * 35),
+            height=max(CHART_H_DEFAULT, len(top15) * 35),
             labels=dict(x="Linea electrica", y="Especie", color="Victimas"),
             aspect="auto",
         )
         fig_heat.update_layout(
-            margin=dict(l=0, r=20, t=10, b=40),
+            margin=CHART_MARGINS,
             xaxis_title="",
             yaxis_title="",
+            title_font_size=16,
         )
-        # Anadir anotaciones de texto para celdas con valor > 0
+        # Anotaciones de texto
         for i, row_name in enumerate(heatmap_ct.index):
             for j, col_name in enumerate(heatmap_ct.columns):
                 val = heatmap_ct.loc[row_name, col_name]
@@ -379,7 +395,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 6: Analisis de Restos por Patron de Actividad
+# SECCION 6: Analisis de Restos por Patron de Actividad (full-width charts)
 # =============================================================================
 st.subheader("6. Analisis de Restos por Patron de Actividad")
 st.caption(
@@ -391,85 +407,96 @@ if "activity_pattern" in df.columns:
     df_activity = df[df["activity_pattern"].isin(["Nocturna", "Crepuscular", "Diurna"])].copy()
 
     if len(df_activity) > 0:
-        col_rt, col_ra = st.columns(2)
-
-        # -- Tipo de restos por patron de actividad ---------------------------
-        with col_rt:
-            st.markdown("**Tipo de restos por patron de actividad**")
-            if "remains_type" in df_activity.columns:
-                rt_df = (
-                    df_activity[df_activity["remains_type"].notna()]
-                    .groupby(["activity_pattern", "remains_type"])
-                    .size()
-                    .reset_index(name="count")
+        # -- Tipo de restos por patron de actividad (full-width) ---------------
+        st.markdown("**Tipo de restos por patron de actividad**")
+        if "remains_type" in df_activity.columns:
+            rt_df = (
+                df_activity[df_activity["remains_type"].notna()]
+                .groupby(["activity_pattern", "remains_type"])
+                .size()
+                .reset_index(name="count")
+            )
+            if len(rt_df) > 0:
+                remains_type_colors = {
+                    k: v for k, v in COLORS.items()
+                    if k in rt_df["remains_type"].unique()
+                }
+                fig_rt = px.bar(
+                    rt_df,
+                    x="activity_pattern",
+                    y="count",
+                    color="remains_type",
+                    barmode="stack",
+                    template=CHART_TEMPLATE,
+                    height=CHART_H_DEFAULT,
+                    color_discrete_map=remains_type_colors if remains_type_colors else None,
+                    labels={
+                        "activity_pattern": "Patron de actividad",
+                        "count": "Victimas",
+                        "remains_type": "Tipo de restos",
+                    },
                 )
-                if len(rt_df) > 0:
-                    # Construir mapa de colores para tipos de restos desde COLORS
-                    remains_type_colors = {
-                        k: v for k, v in COLORS.items()
-                        if k in rt_df["remains_type"].unique()
-                    }
-                    fig_rt = px.bar(
-                        rt_df,
-                        x="activity_pattern",
-                        y="count",
-                        color="remains_type",
-                        barmode="stack",
-                        template=CHART_TEMPLATE,
-                        height=400,
-                        color_discrete_map=remains_type_colors if remains_type_colors else None,
-                        labels={
-                            "activity_pattern": "Patron de actividad",
-                            "count": "Victimas",
-                            "remains_type": "Tipo de restos",
-                        },
-                    )
-                    fig_rt.update_layout(
-                        margin=dict(l=0, r=10, t=10, b=10),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    )
-                    st.plotly_chart(fig_rt, use_container_width=True)
-                else:
-                    st.info("No hay datos de tipo de restos disponibles.")
-            else:
-                st.info("La columna de tipo de restos no esta disponible.")
-
-        # -- Antiguedad de restos por patron de actividad ---------------------
-        with col_ra:
-            st.markdown("**Antiguedad de restos por patron de actividad**")
-            if "remains_age" in df_activity.columns:
-                ra_df = (
-                    df_activity[df_activity["remains_age"].notna()]
-                    .groupby(["activity_pattern", "remains_age"])
-                    .size()
-                    .reset_index(name="count")
+                fig_rt.update_layout(
+                    margin=CHART_MARGINS,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    title_font_size=16,
+                    hovermode="x unified",
                 )
-                if len(ra_df) > 0:
-                    fig_ra = px.bar(
-                        ra_df,
-                        x="activity_pattern",
-                        y="count",
-                        color="remains_age",
-                        barmode="stack",
-                        template=CHART_TEMPLATE,
-                        height=400,
-                        labels={
-                            "activity_pattern": "Patron de actividad",
-                            "count": "Victimas",
-                            "remains_age": "Antiguedad de restos",
-                        },
-                    )
-                    fig_ra.update_layout(
-                        margin=dict(l=0, r=10, t=10, b=10),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    )
-                    st.plotly_chart(fig_ra, use_container_width=True)
-                else:
-                    st.info("No hay datos de antiguedad de restos disponibles.")
+                fig_rt.add_annotation(
+                    text=SOURCE_ANNOTATION,
+                    xref="paper", yref="paper", x=0, y=-0.1,
+                    showarrow=False, font=dict(size=10, color="gray"),
+                )
+                st.plotly_chart(fig_rt, use_container_width=True)
             else:
-                st.info("La columna de antiguedad de restos no esta disponible.")
+                st.info("No hay datos de tipo de restos disponibles.")
+        else:
+            st.info("La columna de tipo de restos no esta disponible.")
 
-        # -- Nota sobre carroneo ----------------------------------------------
+        st.divider()
+
+        # -- Antiguedad de restos por patron de actividad (full-width) ---------
+        st.markdown("**Antiguedad de restos por patron de actividad**")
+        if "remains_age" in df_activity.columns:
+            ra_df = (
+                df_activity[df_activity["remains_age"].notna()]
+                .groupby(["activity_pattern", "remains_age"])
+                .size()
+                .reset_index(name="count")
+            )
+            if len(ra_df) > 0:
+                fig_ra = px.bar(
+                    ra_df,
+                    x="activity_pattern",
+                    y="count",
+                    color="remains_age",
+                    barmode="stack",
+                    template=CHART_TEMPLATE,
+                    height=CHART_H_DEFAULT,
+                    labels={
+                        "activity_pattern": "Patron de actividad",
+                        "count": "Victimas",
+                        "remains_age": "Antiguedad de restos",
+                    },
+                )
+                fig_ra.update_layout(
+                    margin=CHART_MARGINS,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    title_font_size=16,
+                    hovermode="x unified",
+                )
+                fig_ra.add_annotation(
+                    text=SOURCE_ANNOTATION,
+                    xref="paper", yref="paper", x=0, y=-0.1,
+                    showarrow=False, font=dict(size=10, color="gray"),
+                )
+                st.plotly_chart(fig_ra, use_container_width=True)
+            else:
+                st.info("No hay datos de antiguedad de restos disponibles.")
+        else:
+            st.info("La columna de antiguedad de restos no esta disponible.")
+
+        # -- Nota sobre carroneo
         if "scavenging" in df.columns:
             scav_positive = df["scavenging"].notna() & (df["scavenging"] != "No") & (df["scavenging"] != "")
             scav_count = scav_positive.sum()

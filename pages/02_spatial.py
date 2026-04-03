@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
-    COLORS, CHART_HEIGHT, CHART_TEMPLATE, SOURCE_ANNOTATION,
+    COLORS, CHART_TEMPLATE, SOURCE_ANNOTATION,
     MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
     ROAD_DISTANCE_BINS, ROAD_DISTANCE_LABELS,
 )
@@ -25,6 +25,14 @@ from src.statistics import (
     dbscan_clusters, poisson_test_per_span, kruskal_wallis_test,
     stat_badge, format_p_value,
 )
+
+# -- Constantes de diseno -----------------------------------------------------
+MAP_HEIGHT = 600
+CHART_H_BAR = 450
+CHART_H_BOX = 450
+CHART_H_HIST = 450
+CHART_H_SMALL = 350
+CHART_MARGINS = dict(l=20, r=20, t=40, b=60)
 
 # -- Colores de patron de actividad (tuplas RGB para pydeck) -------------------
 ACTIVITY_COLORS_RGB = {
@@ -83,7 +91,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECCION 1: Mapa Interactivo
+# SECCION 1: Mapa Interactivo (full-width, 600px)
 # =============================================================================
 st.subheader("1. Mapa Interactivo")
 st.caption(
@@ -118,15 +126,18 @@ view_state = pdk.ViewState(
 )
 
 if map_mode == "Dispersion (pydeck)":
-    # Preparar datos para pydeck — necesita columnas de lista plana, no objetos anidados
     deck_df = df_geo[["latitude", "longitude", "_color", "_radius",
                        "species_clean", "_date_str", "activity_pattern"]].copy()
-    # Agregar line_label, signal_type, event_type si existen
     for col in ["line_label", "signal_type", "event_type"]:
         if col in df_geo.columns:
             deck_df[col] = df_geo[col].fillna("N/D")
         else:
             deck_df[col] = "N/D"
+    # Add vano_label to tooltip
+    if "vano_label" in df_geo.columns:
+        deck_df["vano_label"] = df_geo["vano_label"].fillna("N/D")
+    else:
+        deck_df["vano_label"] = "N/D"
 
     scatter_layer = pdk.Layer(
         "ScatterplotLayer",
@@ -145,6 +156,7 @@ if map_mode == "Dispersion (pydeck)":
             "<b>{species_clean}</b><br>"
             "Fecha: {_date_str}<br>"
             "Linea: {line_label}<br>"
+            "Vano: {vano_label}<br>"
             "Senalizacion: {signal_type}<br>"
             "Evento: {event_type}<br>"
             "Actividad: {activity_pattern}"
@@ -160,9 +172,31 @@ if map_mode == "Dispersion (pydeck)":
             map_style="mapbox://styles/mapbox/light-v10",
         ),
         use_container_width=True,
+        height=MAP_HEIGHT,
     )
 
 elif map_mode == "Mapa plotly":
+    hover_data_map = {
+        "_date_str": True,
+        "line_label": True,
+        "signal_type": True,
+        "event_type": True,
+        "_radius": False,
+        "latitude": ":.4f",
+        "longitude": ":.4f",
+    }
+    if "vano_label" in df_geo.columns:
+        hover_data_map["vano_label"] = True
+
+    labels_map = {
+        "_date_str": "Fecha",
+        "line_label": "Linea",
+        "signal_type": "Senalizacion",
+        "event_type": "Evento",
+        "activity_pattern": "Actividad",
+        "vano_label": "Vano",
+    }
+
     fig_map = px.scatter_mapbox(
         df_geo,
         lat="latitude",
@@ -175,26 +209,12 @@ elif map_mode == "Mapa plotly":
         size="_radius",
         size_max=12,
         hover_name="species_clean",
-        hover_data={
-            "_date_str": True,
-            "line_label": True,
-            "signal_type": True,
-            "event_type": True,
-            "_radius": False,
-            "latitude": ":.4f",
-            "longitude": ":.4f",
-        },
-        labels={
-            "_date_str": "Fecha",
-            "line_label": "Linea",
-            "signal_type": "Senalizacion",
-            "event_type": "Evento",
-            "activity_pattern": "Actividad",
-        },
+        hover_data=hover_data_map,
+        labels=labels_map,
         mapbox_style="open-street-map",
         zoom=MAP_DEFAULT_ZOOM,
         center={"lat": MAP_CENTER_LAT, "lon": MAP_CENTER_LON},
-        height=600,
+        height=MAP_HEIGHT,
     )
     fig_map.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
@@ -220,6 +240,7 @@ else:  # Mapa de calor
             map_style="mapbox://styles/mapbox/light-v10",
         ),
         use_container_width=True,
+        height=MAP_HEIGHT,
     )
 
 st.caption(f"{SOURCE_ANNOTATION} | {subtitle} | n={len(df_geo):,} registros geolocalizados")
@@ -236,150 +257,227 @@ st.caption(
     "2 otros eventos forman un cluster."
 )
 
-col_cluster, col_spans = st.columns(2)
+# -- Clustering DBSCAN (full-width) -------------------------------------------
+st.markdown("**Clusteres DBSCAN**")
 
-# -- Izquierda: Clustering DBSCAN --------------------------------------------
-with col_cluster:
-    st.markdown("**Clusteres DBSCAN**")
+df_utm = df_geo[df_geo["utm_x"].notna() & df_geo["utm_y"].notna()].copy()
 
-    # Ejecutar DBSCAN sobre coordenadas UTM
-    df_utm = df_geo[df_geo["utm_x"].notna() & df_geo["utm_y"].notna()].copy()
+if len(df_utm) >= 3:
+    coords = df_utm[["utm_x", "utm_y"]].values
+    labels = dbscan_clusters(coords, eps=500, min_samples=3)
+    df_utm["cluster"] = labels
 
-    if len(df_utm) >= 3:
-        coords = df_utm[["utm_x", "utm_y"]].values
-        labels = dbscan_clusters(coords, eps=500, min_samples=3)
-        df_utm["cluster"] = labels
+    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    n_in_cluster = (labels != -1).sum()
+    n_noise = (labels == -1).sum()
 
-        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        n_in_cluster = (labels != -1).sum()
-        n_noise = (labels == -1).sum()
+    # Metricas resumen
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric("Clusteres encontrados", n_clusters)
+    mc2.metric("Puntos en clusteres", f"{n_in_cluster:,}")
+    mc3.metric("Puntos aislados", f"{n_noise:,}")
 
-        # Metricas resumen
-        mc1, mc2, mc3 = st.columns(3)
-        mc1.metric("Clusteres encontrados", n_clusters)
-        mc2.metric("Puntos en clusteres", f"{n_in_cluster:,}")
-        mc3.metric("Puntos aislados", f"{n_noise:,}")
+    # Mapa de clusteres (full-width, 600px)
+    df_utm["cluster_label"] = df_utm["cluster"].apply(
+        lambda c: f"Cluster {c}" if c >= 0 else "Ruido"
+    )
 
-        # Mapa de clusteres
-        df_utm["cluster_label"] = df_utm["cluster"].apply(
-            lambda c: f"Cluster {c}" if c >= 0 else "Ruido"
-        )
+    fig_cluster = px.scatter_mapbox(
+        df_utm,
+        lat="latitude",
+        lon="longitude",
+        color="cluster_label",
+        hover_name="species_clean",
+        hover_data={"line_label": True, "cluster": True},
+        mapbox_style="open-street-map",
+        zoom=MAP_DEFAULT_ZOOM,
+        center={"lat": MAP_CENTER_LAT, "lon": MAP_CENTER_LON},
+        height=MAP_HEIGHT,
+        opacity=0.7,
+    )
+    for trace in fig_cluster.data:
+        if trace.name == "Ruido":
+            trace.marker.size = 5
+            trace.marker.opacity = 0.3
+        else:
+            trace.marker.size = 9
 
-        fig_cluster = px.scatter_mapbox(
-            df_utm,
-            lat="latitude",
-            lon="longitude",
-            color="cluster_label",
-            hover_name="species_clean",
-            hover_data={"line_label": True, "cluster": True},
-            mapbox_style="open-street-map",
-            zoom=MAP_DEFAULT_ZOOM,
-            center={"lat": MAP_CENTER_LAT, "lon": MAP_CENTER_LON},
-            height=450,
-            opacity=0.7,
-        )
-        # Hacer los puntos de ruido mas pequenos y grises
-        for trace in fig_cluster.data:
-            if trace.name == "Ruido":
-                trace.marker.size = 5
-                trace.marker.opacity = 0.3
-            else:
-                trace.marker.size = 9
+    fig_cluster.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=10),
+        ),
+    )
+    st.plotly_chart(fig_cluster, use_container_width=True)
 
-        fig_cluster.update_layout(
-            margin=dict(l=0, r=0, t=0, b=0),
-            legend=dict(
-                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                font=dict(size=10),
-            ),
-        )
-        st.plotly_chart(fig_cluster, use_container_width=True)
-
-        # Desplegable de detalles del cluster
-        if n_clusters > 0:
-            with st.expander("Detalles de clusteres"):
-                cluster_summary = (
-                    df_utm[df_utm["cluster"] >= 0]
-                    .groupby("cluster")
-                    .agg(
-                        casualties=("cluster", "size"),
-                        species=("species_clean", "nunique"),
-                        top_species=("species_clean", lambda x: x.value_counts().index[0]),
-                        lines=("line_label", "nunique"),
-                    )
-                    .sort_values("casualties", ascending=False)
-                    .reset_index()
-                )
-                cluster_summary.columns = ["Cluster", "Victimas", "Especies", "Especie principal", "Lineas"]
-                st.dataframe(cluster_summary, use_container_width=True, hide_index=True)
-    else:
-        st.info("No hay suficientes registros geolocalizados para el clustering DBSCAN (minimo 3 requeridos).")
-
-# -- Derecha: Vanos mas afectados + Test de Poisson --------------------------
-with col_spans:
-    st.markdown("**Top 20 Vanos Mas Afectados**")
-
-    if "span_id" in df.columns and df["span_id"].notna().any():
-        # Construir agregacion a nivel de vano
-        span_data = (
-            df[df["span_id"].notna()]
-            .groupby("span_id")
+    # Detalles del cluster (full-width table, no expander)
+    if n_clusters > 0:
+        st.markdown("**Detalles de clusteres**")
+        cluster_summary = (
+            df_utm[df_utm["cluster"] >= 0]
+            .groupby("cluster")
             .agg(
-                casualties=("span_id", "size"),
-                line=("line_label", "first") if "line_label" in df.columns else ("span_id", "first"),
-                signal_type=("signal_type", "first") if "signal_type" in df.columns else ("span_id", "first"),
-                nearest_pylon=("nearest_pylon", "first") if "nearest_pylon" in df.columns else ("span_id", "first"),
+                casualties=("cluster", "size"),
+                species=("species_clean", "nunique"),
+                top_species=("species_clean", lambda x: x.value_counts().index[0]),
+                lines=("line_label", "nunique"),
             )
             .sort_values("casualties", ascending=False)
-            .head(20)
             .reset_index()
         )
-        span_data.columns = ["Vano", "Victimas", "Linea", "Senalizacion", "Apoyo mas cercano"]
-
-        st.dataframe(span_data, use_container_width=True, hide_index=True, height=350)
-
-        # Test de Poisson
-        st.markdown("**Test de Poisson para Puntos Calientes**")
-        st.caption("Que vanos tienen significativamente mas eventos de los esperados bajo un modelo uniforme?")
-
-        df_spans = df[df["span_id"].notna()].copy()
-        poisson_df = poisson_test_per_span(df_spans, span_col="span_id")
-
-        if len(poisson_df) > 0:
-            n_sig = poisson_df["significant"].sum()
-            n_total_spans = len(poisson_df)
-            expected_rate = poisson_df["expected"].iloc[0] if len(poisson_df) > 0 else 0
-
-            st.markdown(
-                f"**{n_sig}** de **{n_total_spans}** vanos tienen significativamente mas "
-                f"eventos que la tasa esperada de **{expected_rate:.2f}** por vano "
-                f"(test de Poisson unilateral, p < 0,05)."
-            )
-
-            # Mostrar vanos significativos
-            sig_spans = (
-                poisson_df[poisson_df["significant"]]
-                .sort_values("observed", ascending=False)
-                .head(10)
-            )
-            if len(sig_spans) > 0:
-                display_sig = sig_spans[["span_id", "observed", "expected", "p_value"]].copy()
-                display_sig["p_value"] = display_sig["p_value"].apply(format_p_value)
-                display_sig.columns = ["Vano", "Observado", "Esperado", "Valor p"]
-                st.dataframe(display_sig, use_container_width=True, hide_index=True)
-            else:
-                st.info("Ningun vano supera significativamente la tasa esperada.")
-        else:
-            st.info("No se pudo calcular el test de Poisson.")
-    else:
-        st.info("Los datos de identificacion de vano no estan disponibles en el conjunto de datos actual.")
+        cluster_summary.columns = ["Cluster", "Victimas", "Especies", "Especie principal", "Lineas"]
+        st.dataframe(cluster_summary, use_container_width=True, hide_index=True, height=400)
+else:
+    st.info("No hay suficientes registros geolocalizados para el clustering DBSCAN (minimo 3 requeridos).")
 
 st.divider()
 
 # =============================================================================
-# SECCION 3: Proximidad a Carreteras (condicional)
+# SECCION 3: Top 20 Vanos Mas Afectados (full-width + clickable)
 # =============================================================================
-st.subheader("3. Proximidad a Carreteras")
+st.subheader("3. Top 20 Vanos Mas Afectados")
+
+# Determine the vano column to use
+vano_col = "vano_label" if "vano_label" in df.columns else "span_id"
+has_vano = vano_col in df.columns and df[vano_col].notna().any()
+
+if has_vano:
+    # Build span-level aggregation using vano_label as primary display
+    agg_dict = {
+        "casualties": (vano_col, "size"),
+    }
+    if "line_label" in df.columns:
+        agg_dict["line"] = ("line_label", "first")
+    if "signal_type" in df.columns:
+        agg_dict["signal_type"] = ("signal_type", "first")
+    if "nearest_pylon" in df.columns:
+        agg_dict["nearest_pylon"] = ("nearest_pylon", "first")
+    if "span_id" in df.columns and vano_col != "span_id":
+        agg_dict["span_id_val"] = ("span_id", "first")
+
+    span_data = (
+        df[df[vano_col].notna()]
+        .groupby(vano_col)
+        .agg(**agg_dict)
+        .sort_values("casualties", ascending=False)
+        .head(20)
+        .reset_index()
+    )
+
+    # Build display columns
+    col_rename = {vano_col: "Vano", "casualties": "Victimas"}
+    if "line" in span_data.columns:
+        col_rename["line"] = "Linea"
+    if "signal_type" in span_data.columns:
+        col_rename["signal_type"] = "Senalizacion"
+    if "nearest_pylon" in span_data.columns:
+        col_rename["nearest_pylon"] = "Apoyo mas cercano"
+    if "span_id_val" in span_data.columns:
+        col_rename["span_id_val"] = "ID Sistema"
+
+    span_data = span_data.rename(columns=col_rename)
+
+    # Full-width table
+    st.dataframe(span_data, use_container_width=True, hide_index=True, height=400)
+
+    # -- Clickable span selector for map zoom ---------------------------------
+    st.markdown("**Ubicacion del vano seleccionado**")
+
+    top_vanos = span_data["Vano"].tolist()
+    selected_vano = st.selectbox(
+        "Seleccionar vano para ver ubicacion:",
+        options=["(ninguno)"] + top_vanos,
+        index=0,
+        key="spatial_vano_select",
+    )
+
+    if selected_vano != "(ninguno)":
+        # Find records for this vano
+        vano_records = df_geo[df_geo[vano_col] == selected_vano]
+
+        if len(vano_records) > 0 and vano_records["latitude"].notna().any():
+            avg_lat = vano_records["latitude"].mean()
+            avg_lon = vano_records["longitude"].mean()
+
+            fig_vano_map = px.scatter_mapbox(
+                vano_records,
+                lat="latitude",
+                lon="longitude",
+                color_discrete_sequence=["#D32F2F"],
+                hover_name="species_clean",
+                hover_data={
+                    "_date_str": True,
+                    "line_label": True,
+                    "signal_type": True,
+                },
+                labels={
+                    "_date_str": "Fecha",
+                    "line_label": "Linea",
+                    "signal_type": "Senalizacion",
+                },
+                mapbox_style="open-street-map",
+                zoom=14,
+                center={"lat": avg_lat, "lon": avg_lon},
+                height=400,
+            )
+            fig_vano_map.update_traces(marker=dict(size=14))
+            fig_vano_map.update_layout(
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_vano_map, use_container_width=True)
+            st.caption(
+                f"Vano **{selected_vano}** — {len(vano_records)} victima(s) registrada(s). "
+                f"Coordenadas medias: {avg_lat:.4f}, {avg_lon:.4f}"
+            )
+        else:
+            st.info(f"El vano {selected_vano} no tiene coordenadas geolocalizadas disponibles.")
+
+    st.divider()
+
+    # -- Test de Poisson (full-width) ------------------------------------------
+    st.markdown("**Test de Poisson para Puntos Calientes**")
+    st.caption("Que vanos tienen significativamente mas eventos de los esperados bajo un modelo uniforme?")
+
+    df_spans = df[df[vano_col].notna()].copy()
+    poisson_df = poisson_test_per_span(df_spans, span_col=vano_col)
+
+    if len(poisson_df) > 0:
+        n_sig = poisson_df["significant"].sum()
+        n_total_spans = len(poisson_df)
+        expected_rate = poisson_df["expected"].iloc[0] if len(poisson_df) > 0 else 0
+
+        st.markdown(
+            f"**{n_sig}** de **{n_total_spans}** vanos tienen significativamente mas "
+            f"eventos que la tasa esperada de **{expected_rate:.2f}** por vano "
+            f"(test de Poisson unilateral, p < 0,05)."
+        )
+
+        # Mostrar vanos significativos (full-width)
+        sig_spans = (
+            poisson_df[poisson_df["significant"]]
+            .sort_values("observed", ascending=False)
+            .head(10)
+        )
+        if len(sig_spans) > 0:
+            display_sig = sig_spans[["span_id", "observed", "expected", "p_value"]].copy()
+            display_sig["p_value"] = display_sig["p_value"].apply(format_p_value)
+            display_sig.columns = ["Vano", "Observado", "Esperado", "Valor p"]
+            st.dataframe(display_sig, use_container_width=True, hide_index=True, height=400)
+        else:
+            st.info("Ningun vano supera significativamente la tasa esperada.")
+    else:
+        st.info("No se pudo calcular el test de Poisson.")
+else:
+    st.info("Los datos de identificacion de vano no estan disponibles en el conjunto de datos actual.")
+
+st.divider()
+
+# =============================================================================
+# SECCION 4: Proximidad a Carreteras (condicional)
+# =============================================================================
+st.subheader("4. Proximidad a Carreteras")
 
 has_road_distance = "road_distance_m" in df.columns and df["road_distance_m"].notna().any()
 
@@ -395,10 +493,9 @@ else:
     n_road = len(df_road)
     st.caption(f"Analizando {n_road:,} registros con datos de proximidad a carreteras.")
 
-    # -- Histograma de distancias a carretera ---------------------------------
+    # -- Histograma de distancias a carretera (full-width) ---------------------
     st.markdown("**Distribucion de distancia a carretera**")
 
-    # Agrupar distancias en rangos
     df_road["road_bin"] = pd.cut(
         df_road["road_distance_m"],
         bins=ROAD_DISTANCE_BINS,
@@ -411,139 +508,150 @@ else:
         x="road_distance_m",
         nbins=50,
         template=CHART_TEMPLATE,
-        height=350,
+        height=CHART_H_HIST,
         labels={"road_distance_m": "Distancia a la carretera mas cercana (m)", "count": "Victimas"},
         color_discrete_sequence=[COLORS.get("Accidente", "#D32F2F")],
     )
     fig_hist.update_layout(
-        margin=dict(l=0, r=20, t=10, b=40),
+        margin=CHART_MARGINS,
         yaxis_title="Numero de victimas",
+        title_font_size=16,
+        hovermode="x unified",
     )
     fig_hist.add_annotation(
         text=f"{SOURCE_ANNOTATION} | n={n_road:,}",
-        xref="paper", yref="paper", x=0, y=-0.18,
+        xref="paper", yref="paper", x=0, y=-0.15,
         showarrow=False, font=dict(size=10, color="gray"),
     )
     st.plotly_chart(fig_hist, use_container_width=True)
 
-    # -- Diagramas de caja ----------------------------------------------------
-    col_box1, col_box2 = st.columns(2)
+    st.divider()
 
-    with col_box1:
-        st.markdown("**Distancia por patron de actividad**")
+    # -- Distancia por patron de actividad (full-width) ------------------------
+    st.markdown("**Distancia por patron de actividad**")
 
-        if "activity_pattern" in df_road.columns:
-            fig_box_act = px.box(
-                df_road,
-                x="activity_pattern",
-                y="road_distance_m",
-                color="activity_pattern",
-                color_discrete_map={
-                    k: "#{:02x}{:02x}{:02x}".format(*v)
-                    for k, v in ACTIVITY_COLORS_RGB.items()
-                },
-                template=CHART_TEMPLATE,
-                height=CHART_HEIGHT,
-                labels={
-                    "activity_pattern": "",
-                    "road_distance_m": "Distancia a carretera (m)",
-                },
-                category_orders={
-                    "activity_pattern": ["Nocturna", "Crepuscular", "Diurna", "Desconocida"]
-                },
-            )
-            fig_box_act.update_layout(
-                showlegend=False,
-                margin=dict(l=0, r=20, t=10, b=10),
-            )
-            st.plotly_chart(fig_box_act, use_container_width=True)
-
-            # Kruskal-Wallis para patron de actividad
-            groups_act = [
-                df_road[df_road["activity_pattern"] == p]["road_distance_m"].dropna().values
-                for p in ["Nocturna", "Crepuscular", "Diurna", "Desconocida"]
-                if p in df_road["activity_pattern"].values
-                and len(df_road[df_road["activity_pattern"] == p]["road_distance_m"].dropna()) > 0
-            ]
-            if len(groups_act) >= 2:
-                kw_act = kruskal_wallis_test(groups_act)
-                badge_act = stat_badge(
-                    "Kruskal-Wallis (Actividad)",
-                    kw_act["statistic"],
-                    kw_act["p_value"],
-                    effect_size=kw_act["effect_size"],
-                    n=n_road,
-                )
-                st.markdown(badge_act, unsafe_allow_html=True)
-        else:
-            st.info("Los datos de patron de actividad no estan disponibles.")
-
-    with col_box2:
-        st.markdown("**Distancia por tipo de senalizacion**")
-
-        if "signal_type" in df_road.columns and df_road["signal_type"].notna().any():
-            df_road_sig = df_road[df_road["signal_type"].notna()]
-
-            fig_box_sig = px.box(
-                df_road_sig,
-                x="signal_type",
-                y="road_distance_m",
-                color="signal_type",
-                color_discrete_map={
-                    s: COLORS.get(s, "#999")
-                    for s in df_road_sig["signal_type"].unique()
-                },
-                template=CHART_TEMPLATE,
-                height=CHART_HEIGHT,
-                labels={
-                    "signal_type": "",
-                    "road_distance_m": "Distancia a carretera (m)",
-                },
-            )
-            fig_box_sig.update_layout(
-                showlegend=False,
-                margin=dict(l=0, r=20, t=10, b=10),
-            )
-            st.plotly_chart(fig_box_sig, use_container_width=True)
-
-            # Kruskal-Wallis para tipo de senalizacion
-            groups_sig = [
-                df_road_sig[df_road_sig["signal_type"] == s]["road_distance_m"].dropna().values
-                for s in df_road_sig["signal_type"].unique()
-                if len(df_road_sig[df_road_sig["signal_type"] == s]["road_distance_m"].dropna()) > 0
-            ]
-            if len(groups_sig) >= 2:
-                kw_sig = kruskal_wallis_test(groups_sig)
-                badge_sig = stat_badge(
-                    "Kruskal-Wallis (Senalizacion)",
-                    kw_sig["statistic"],
-                    kw_sig["p_value"],
-                    effect_size=kw_sig["effect_size"],
-                    n=len(df_road_sig),
-                )
-                st.markdown(badge_sig, unsafe_allow_html=True)
-        else:
-            st.info("Los datos de tipo de senalizacion no estan disponibles para los registros de proximidad a carreteras.")
-
-    # -- Tabla resumen por rango de distancia ---------------------------------
-    with st.expander("Desglose por rango de distancia"):
-        agg_dict = {
-            "casualties": ("road_bin", "size"),
-            "species": ("species_clean", "nunique"),
-        }
-        if "conservation_score" in df_road.columns:
-            agg_dict["median_conservation"] = ("conservation_score", "median")
-
-        bin_summary = (
-            df_road.groupby("road_bin", observed=True)
-            .agg(**agg_dict)
-            .reset_index()
+    if "activity_pattern" in df_road.columns:
+        fig_box_act = px.box(
+            df_road,
+            x="activity_pattern",
+            y="road_distance_m",
+            color="activity_pattern",
+            color_discrete_map={
+                "Nocturna": "#{:02x}{:02x}{:02x}".format(*ACTIVITY_COLORS_RGB["Nocturna"]),
+                "Crepuscular": "#{:02x}{:02x}{:02x}".format(*ACTIVITY_COLORS_RGB["Crepuscular"]),
+                "Diurna": "#{:02x}{:02x}{:02x}".format(*ACTIVITY_COLORS_RGB["Diurna"]),
+                "Desconocida": "#{:02x}{:02x}{:02x}".format(*ACTIVITY_COLORS_RGB["Desconocida"]),
+            },
+            template=CHART_TEMPLATE,
+            height=CHART_H_BOX,
+            labels={
+                "activity_pattern": "",
+                "road_distance_m": "Distancia a carretera (m)",
+            },
+            category_orders={
+                "activity_pattern": ["Nocturna", "Crepuscular", "Diurna", "Desconocida"]
+            },
         )
+        fig_box_act.update_layout(
+            showlegend=False,
+            margin=CHART_MARGINS,
+            title_font_size=16,
+            hovermode="closest",
+        )
+        st.plotly_chart(fig_box_act, use_container_width=True)
 
-        if "median_conservation" in bin_summary.columns:
-            bin_summary.columns = ["Rango de distancia", "Victimas", "Especies", "Mediana puntuacion conservacion"]
-        else:
-            bin_summary.columns = ["Rango de distancia", "Victimas", "Especies"]
+        # Kruskal-Wallis badge BELOW chart
+        groups_act = [
+            df_road[df_road["activity_pattern"] == p]["road_distance_m"].dropna().values
+            for p in ["Nocturna", "Crepuscular", "Diurna", "Desconocida"]
+            if p in df_road["activity_pattern"].values
+            and len(df_road[df_road["activity_pattern"] == p]["road_distance_m"].dropna()) > 0
+        ]
+        if len(groups_act) >= 2:
+            kw_act = kruskal_wallis_test(groups_act)
+            badge_act = stat_badge(
+                "Kruskal-Wallis (Actividad)",
+                kw_act["statistic"],
+                kw_act["p_value"],
+                effect_size=kw_act["effect_size"],
+                n=n_road,
+            )
+            st.markdown(badge_act, unsafe_allow_html=True)
+    else:
+        st.info("Los datos de patron de actividad no estan disponibles.")
 
-        bin_summary["% del total"] = (bin_summary["Victimas"] / bin_summary["Victimas"].sum() * 100).round(1)
-        st.dataframe(bin_summary, use_container_width=True, hide_index=True)
+    st.divider()
+
+    # -- Distancia por tipo de senalizacion (full-width) -----------------------
+    st.markdown("**Distancia por tipo de senalizacion**")
+
+    if "signal_type" in df_road.columns and df_road["signal_type"].notna().any():
+        df_road_sig = df_road[df_road["signal_type"].notna()]
+
+        fig_box_sig = px.box(
+            df_road_sig,
+            x="signal_type",
+            y="road_distance_m",
+            color="signal_type",
+            color_discrete_map={
+                s: COLORS.get(s, "#999")
+                for s in df_road_sig["signal_type"].unique()
+            },
+            template=CHART_TEMPLATE,
+            height=CHART_H_BOX,
+            labels={
+                "signal_type": "",
+                "road_distance_m": "Distancia a carretera (m)",
+            },
+        )
+        fig_box_sig.update_layout(
+            showlegend=False,
+            margin=CHART_MARGINS,
+            title_font_size=16,
+            hovermode="closest",
+        )
+        st.plotly_chart(fig_box_sig, use_container_width=True)
+
+        # Kruskal-Wallis badge BELOW chart
+        groups_sig = [
+            df_road_sig[df_road_sig["signal_type"] == s]["road_distance_m"].dropna().values
+            for s in df_road_sig["signal_type"].unique()
+            if len(df_road_sig[df_road_sig["signal_type"] == s]["road_distance_m"].dropna()) > 0
+        ]
+        if len(groups_sig) >= 2:
+            kw_sig = kruskal_wallis_test(groups_sig)
+            badge_sig = stat_badge(
+                "Kruskal-Wallis (Senalizacion)",
+                kw_sig["statistic"],
+                kw_sig["p_value"],
+                effect_size=kw_sig["effect_size"],
+                n=len(df_road_sig),
+            )
+            st.markdown(badge_sig, unsafe_allow_html=True)
+    else:
+        st.info("Los datos de tipo de senalizacion no estan disponibles para los registros de proximidad a carreteras.")
+
+    st.divider()
+
+    # -- Tabla resumen por rango de distancia (full-width, no expander) --------
+    st.markdown("**Desglose por rango de distancia**")
+    agg_dict_road = {
+        "casualties": ("road_bin", "size"),
+        "species": ("species_clean", "nunique"),
+    }
+    if "conservation_score" in df_road.columns:
+        agg_dict_road["median_conservation"] = ("conservation_score", "median")
+
+    bin_summary = (
+        df_road.groupby("road_bin", observed=True)
+        .agg(**agg_dict_road)
+        .reset_index()
+    )
+
+    if "median_conservation" in bin_summary.columns:
+        bin_summary.columns = ["Rango de distancia", "Victimas", "Especies", "Mediana puntuacion conservacion"]
+    else:
+        bin_summary.columns = ["Rango de distancia", "Victimas", "Especies"]
+
+    bin_summary["% del total"] = (bin_summary["Victimas"] / bin_summary["Victimas"].sum() * 100).round(1)
+    st.dataframe(bin_summary, use_container_width=True, hide_index=True, height=400)

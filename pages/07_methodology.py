@@ -61,12 +61,11 @@ with col_info2:
 st.divider()
 
 # =============================================================================
-# SECCION 2: Diccionario de Datos
+# SECCION 2: Diccionario de Datos (full-width, height=500)
 # =============================================================================
 st.subheader("Diccionario de Datos")
 st.caption("Columnas clave del conjunto de datos limpio con descripciones y valores de ejemplo")
 
-# Construir diccionario de datos desde el dataframe real
 key_columns = {
     "species_clean": {
         "description": "Nombre de especie normalizado: Cientifico / Comun",
@@ -123,6 +122,16 @@ key_columns = {
         "type": "integer",
         "example": "132",
     },
+    "vano_label": {
+        "description": "Identificador del vano: numero de apoyo a apoyo (p.ej. 86-87) o ID del sistema como respaldo",
+        "type": "string",
+        "example": "86-87",
+    },
+    "span_id": {
+        "description": "Identificador del sistema para el vano (p.ej. Span #10650)",
+        "type": "string",
+        "example": "Span #10650",
+    },
     "signal_type": {
         "description": "Tipo de dispositivo anticolision instalado en el vano",
         "type": "string",
@@ -173,11 +182,6 @@ key_columns = {
         "type": "string",
         "example": "Sur",
     },
-    "span_id": {
-        "description": "Identificador del vano especifico (entre dos apoyos)",
-        "type": "string",
-        "example": "V-23",
-    },
     "observer": {
         "description": "Nombre del observador de campo que registro el evento",
         "type": "string",
@@ -227,7 +231,7 @@ for col_name, info in key_columns.items():
     })
 
 dict_df = pd.DataFrame(dict_rows)
-st.dataframe(dict_df, use_container_width=True, hide_index=True, height=600)
+st.dataframe(dict_df, use_container_width=True, hide_index=True, height=500)
 
 st.divider()
 
@@ -241,7 +245,7 @@ Cada especie del conjunto de datos se clasifica en uno de cuatro patrones de act
 basados en la literatura ornitologica establecida:
 
 - **Nocturna**: Activa principalmente de noche. Incluye Procellariiformes (pardelas, petreles,
-  paiños) que son estrictamente nocturnos en tierra durante la temporada de cria y fuertemente
+  painos) que son estrictamente nocturnos en tierra durante la temporada de cria y fuertemente
   atraidos por las fuentes de luz artificial.
 - **Crepuscular**: Activa principalmente al amanecer y al anochecer, a menudo tambien activa
   de noche. Incluye alcaravanes, corredores, gangas y codornices.
@@ -277,7 +281,7 @@ with col_diurn:
         st.caption(f"...y {remaining} especies diurnas mas")
 
 st.markdown("""
-**Nota sobre Procellariiformes:** Las pardelas, petreles y paiños son estrictamente nocturnos
+**Nota sobre Procellariiformes:** Las pardelas, petreles y painos son estrictamente nocturnos
 al visitar las colonias de cria terrestres. Su vulnerabilidad a la luz artificial y a las
 colisiones con lineas electricas durante la noche esta bien documentada en la literatura
 ornitologica. Esta clasificacion es fundamental para el argumento de que las marcas anticolision
@@ -287,163 +291,117 @@ visuales son insuficientes para estas especies.
 st.divider()
 
 # =============================================================================
-# SECCION 4: Pruebas Estadisticas
+# SECCION 4: Pruebas Estadisticas (full-width sections with dividers)
 # =============================================================================
 st.subheader("Pruebas Estadisticas")
 st.caption("Metodos utilizados en las paginas del panel, con supuestos y guia de interpretacion")
 
-with st.expander("Prueba chi-cuadrado de independencia"):
-    st.markdown("""
-    **Que evalua:** Si dos variables categoricas son estadisticamente independientes.
+st.markdown("**Prueba chi-cuadrado de independencia**")
+st.markdown("""
+**Que evalua:** Si dos variables categoricas son estadisticamente independientes.
 
-    **Supuestos:**
-    - Las observaciones son independientes
-    - Las frecuencias esperadas en las celdas deben ser >= 5 (cuando se viola, se prefiere la prueba exacta de Fisher)
+**Supuestos:** Las observaciones son independientes. Las frecuencias esperadas en las celdas deben ser >= 5 (cuando se viola, se prefiere la prueba exacta de Fisher).
 
-    **Cuando se usa:** Para comparar distribuciones de tipo de senalizacion entre tipos de evento,
-    patrones de actividad entre tipos de senalizacion y otras tabulaciones cruzadas categoricas.
+**Cuando se usa:** Para comparar distribuciones de tipo de senalizacion entre tipos de evento, patrones de actividad entre tipos de senalizacion y otras tabulaciones cruzadas categoricas.
 
-    **Tamano del efecto:** V de Cramer (0 = sin asociacion, 1 = asociacion perfecta).
-    """)
+**Tamano del efecto:** V de Cramer (0 = sin asociacion, 1 = asociacion perfecta).
+""")
 
-with st.expander("Prueba exacta de Fisher (por pares)"):
-    st.markdown("""
-    **Que evalua:** Si dos grupos difieren significativamente en un resultado categorico, utilizando
-    calculos de probabilidad exacta en lugar de la aproximacion chi-cuadrado.
+st.divider()
 
-    **Supuestos:**
-    - Totales marginales fijos
-    - Observaciones independientes
+st.markdown("**Prueba exacta de Fisher (por pares)**")
+st.markdown("""
+**Que evalua:** Si dos grupos difieren significativamente en un resultado categorico, utilizando calculos de probabilidad exacta en lugar de la aproximacion chi-cuadrado.
 
-    **Cuando se usa:** Comparaciones post-hoc por pares despues de una prueba chi-cuadrado significativa,
-    especialmente cuando los recuentos en las celdas son pequenos. Se aplica la correccion de Bonferroni
-    para comparaciones multiples.
+**Cuando se usa:** Comparaciones post-hoc por pares despues de una prueba chi-cuadrado significativa, especialmente cuando los recuentos en las celdas son pequenos. Se aplica la correccion de Bonferroni para comparaciones multiples.
 
-    **Resultado:** Razon de probabilidades (odds ratio) y valor p ajustado para cada par.
-    """)
+**Resultado:** Razon de probabilidades (odds ratio) y valor p ajustado para cada par.
+""")
 
-with st.expander("Prueba H de Kruskal-Wallis"):
-    st.markdown("""
-    **Que evalua:** Si las distribuciones de una variable continua difieren entre tres o mas grupos
-    independientes. Alternativa no parametrica al ANOVA de un factor.
+st.divider()
 
-    **Supuestos:**
-    - Observaciones independientes
-    - Variable dependiente ordinal o continua
-    - Formas de distribucion similares entre grupos (evalua desplazamiento de ubicacion)
+st.markdown("**Prueba H de Kruskal-Wallis**")
+st.markdown("""
+**Que evalua:** Si las distribuciones de una variable continua difieren entre tres o mas grupos independientes. Alternativa no parametrica al ANOVA de un factor.
 
-    **Cuando se usa:** Para comparar recuentos de victimas por vano entre tipos de senalizacion,
-    donde los datos de conteo suelen tener una distribucion asimetrica a la derecha y no normal.
+**Cuando se usa:** Para comparar recuentos de victimas por vano entre tipos de senalizacion, donde los datos de conteo suelen tener una distribucion asimetrica a la derecha y no normal.
 
-    **Tamano del efecto:** Epsilon-cuadrado (0 = sin efecto, 1 = separacion completa).
-    """)
+**Tamano del efecto:** Epsilon-cuadrado (0 = sin efecto, 1 = separacion completa).
+""")
 
-with st.expander("Prueba de tendencia de Mann-Kendall + pendiente de Sen"):
-    st.markdown("""
-    **Que evalua:** Si existe una tendencia monotonica (ascendente o descendente) en una serie
-    temporal. No parametrica: no asume linealidad ni normalidad.
+st.divider()
 
-    **Supuestos:**
-    - Las observaciones estan ordenadas temporalmente
-    - Sin autocorrelacion serial fuerte (puede inflar la significacion)
+st.markdown("**Prueba de tendencia de Mann-Kendall + pendiente de Sen**")
+st.markdown("""
+**Que evalua:** Si existe una tendencia monotonica (ascendente o descendente) en una serie temporal. No parametrica: no asume linealidad ni normalidad.
 
-    **Cuando se usa:** Para evaluar si los recuentos anuales de mortalidad muestran una tendencia
-    significativa creciente o decreciente a lo largo del periodo de estudio.
+**Cuando se usa:** Para evaluar si los recuentos anuales de mortalidad muestran una tendencia significativa creciente o decreciente a lo largo del periodo de estudio.
 
-    **Resultado:** Tau de Kendall (-1 a +1), valor p y pendiente de Sen (mediana de todas las
-    pendientes por pares, robusta ante valores atipicos).
-    """)
+**Resultado:** Tau de Kendall (-1 a +1), valor p y pendiente de Sen (mediana de todas las pendientes por pares, robusta ante valores atipicos).
+""")
 
-with st.expander("Regresion binomial negativa"):
-    st.markdown("""
-    **Que evalua:** Modela datos de conteo (p.ej., victimas por vano) en funcion de variables
-    predictoras, permitiendo sobredispersion (varianza > media).
+st.divider()
 
-    **Supuestos:**
-    - Variable dependiente de conteo
-    - Sobredispersion relativa a Poisson (alfa > 0)
-    - Independencia de observaciones condicionada a los predictores
+st.markdown("**Regresion binomial negativa**")
+st.markdown("""
+**Que evalua:** Modela datos de conteo (p.ej., victimas por vano) en funcion de variables predictoras, permitiendo sobredispersion (varianza > media).
 
-    **Cuando se usa:** Modelo multivariante que controla por tension y separacion de senalizacion
-    al comparar los efectos del tipo de senalizacion sobre la mortalidad por vano.
+**Cuando se usa:** Modelo multivariante que controla por tension y separacion de senalizacion al comparar los efectos del tipo de senalizacion sobre la mortalidad por vano.
 
-    **Resultado:** Razones de tasas de incidencia (IRR) con intervalos de confianza. IRR > 1
-    significa mayor mortalidad respecto a la categoria de referencia.
-    """)
+**Resultado:** Razones de tasas de incidencia (IRR) con intervalos de confianza. IRR > 1 significa mayor mortalidad respecto a la categoria de referencia.
+""")
 
-with st.expander("Prueba de Rayleigh (uniformidad circular)"):
-    st.markdown("""
-    **Que evalua:** Si una muestra de datos circulares (direccionales) esta distribuida uniformemente
-    alrededor del circulo, o si tiene una direccion preferente.
+st.divider()
 
-    **Supuestos:**
-    - Los datos son angulares/circulares (aqui, mes mapeado a 0-2pi)
-    - Hipotesis alternativa unimodal
+st.markdown("**Prueba de Rayleigh (uniformidad circular)**")
+st.markdown("""
+**Que evalua:** Si una muestra de datos circulares (direccionales) esta distribuida uniformemente alrededor del circulo, o si tiene una direccion preferente.
 
-    **Cuando se usa:** Para evaluar si la mortalidad de aves tiene un pico estacional (distribucion
-    mensual no uniforme) en lugar de estar repartida uniformemente a lo largo del ano.
+**Cuando se usa:** Para evaluar si la mortalidad de aves tiene un pico estacional (distribucion mensual no uniforme) en lugar de estar repartida uniformemente a lo largo del ano.
 
-    **Resultado:** Estadistico Z de Rayleigh, valor p, direccion media, longitud resultante media
-    (R-bar; 0 = uniforme, 1 = perfectamente concentrada).
-    """)
+**Resultado:** Estadistico Z de Rayleigh, valor p, direccion media, longitud resultante media (R-bar; 0 = uniforme, 1 = perfectamente concentrada).
+""")
 
-with st.expander("Prueba U-cuadrado de Watson (circular, dos muestras)"):
-    st.markdown("""
-    **Que evalua:** Si dos muestras de datos circulares provienen de la misma distribucion.
+st.divider()
 
-    **Supuestos:**
-    - Ambas muestras son circulares/angulares
-    - Distribuciones circulares continuas
+st.markdown("**Prueba U-cuadrado de Watson (circular, dos muestras)**")
+st.markdown("""
+**Que evalua:** Si dos muestras de datos circulares provienen de la misma distribucion.
 
-    **Cuando se usa:** Para comparar los patrones estacionales (mensuales) de mortalidad de dos
-    grupos, como especies nocturnas vs diurnas, para determinar si sus meses de mayor mortalidad
-    difieren.
+**Cuando se usa:** Para comparar los patrones estacionales (mensuales) de mortalidad de dos grupos, como especies nocturnas vs diurnas, para determinar si sus meses de mayor mortalidad difieren.
 
-    **Resultado:** Estadistico U-cuadrado con valor p aproximado a partir de tablas de valores criticos.
-    """)
+**Resultado:** Estadistico U-cuadrado con valor p aproximado a partir de tablas de valores criticos.
+""")
 
-with st.expander("Prueba binomial"):
-    st.markdown("""
-    **Que evalua:** Si una proporcion observada difiere significativamente de una proporcion
-    esperada bajo la hipotesis nula.
+st.divider()
 
-    **Supuestos:**
-    - Resultado binario (exito/fracaso)
-    - Ensayos independientes
-    - Numero fijo de ensayos
+st.markdown("**Prueba binomial**")
+st.markdown("""
+**Que evalua:** Si una proporcion observada difiere significativamente de una proporcion esperada bajo la hipotesis nula.
 
-    **Cuando se usa:** Para evaluar si un grupo especifico de especies (p.ej., aves nocturnas)
-    representa una proporcion significativamente mayor de la mortalidad de lo esperado por su
-    representacion en la avifauna local.
+**Cuando se usa:** Para evaluar si un grupo especifico de especies (p.ej., aves nocturnas) representa una proporcion significativamente mayor de la mortalidad de lo esperado por su representacion en la avifauna local.
 
-    **Resultado:** Proporcion observada, proporcion esperada y valor p bilateral.
-    """)
+**Resultado:** Proporcion observada, proporcion esperada y valor p bilateral.
+""")
 
-with st.expander("Agrupacion espacial DBSCAN"):
-    st.markdown("""
-    **Que evalua:** Identifica agrupaciones espaciales de eventos de mortalidad sin requerir un
-    numero predefinido de clusters.
+st.divider()
 
-    **Parametros:**
-    - **eps** (por defecto 500m): Distancia maxima entre dos puntos para ser considerados vecinos
-    - **min_samples** (por defecto 3): Puntos minimos para formar una region densa (nucleo del cluster)
+st.markdown("**Agrupacion espacial DBSCAN**")
+st.markdown("""
+**Que evalua:** Identifica agrupaciones espaciales de eventos de mortalidad sin requerir un numero predefinido de clusters.
 
-    **Cuando se usa:** Para detectar puntos negros de mortalidad a lo largo de los corredores de
-    lineas electricas utilizando coordenadas UTM. Los puntos que no pertenecen a ningun cluster
-    se etiquetan como ruido (-1).
+**Parametros:** **eps** (por defecto 500m): Distancia maxima entre dos puntos para ser considerados vecinos. **min_samples** (por defecto 3): Puntos minimos para formar una region densa.
 
-    **Resultado:** Etiquetas de cluster para cada punto. Los puntos de ruido se excluyen de las
-    estadisticas de cluster.
-    """)
+**Cuando se usa:** Para detectar puntos negros de mortalidad a lo largo de los corredores de lineas electricas utilizando coordenadas UTM. Los puntos que no pertenecen a ningun cluster se etiquetan como ruido (-1).
+""")
 
 st.divider()
 
 # =============================================================================
-# SECCION 5: Notas de Calidad de Datos
+# SECCION 5: Notas de Calidad de Datos (full-width tables)
 # =============================================================================
 st.subheader("Notas de Calidad de Datos")
 
-# Conteo de nulos por columna clave
 st.markdown("**Datos faltantes por columna clave:**")
 
 null_cols = [
@@ -464,9 +422,9 @@ for col in null_cols:
         })
 
 null_df = pd.DataFrame(null_data)
-st.dataframe(null_df, use_container_width=True, hide_index=True)
+st.dataframe(null_df, use_container_width=True, hide_index=True, height=400)
 
-# Distribucion de observadores
+# Distribucion de observadores (full-width)
 st.markdown("**Distribucion de observadores:**")
 if "observer" in df_full.columns:
     observer_counts = (
@@ -476,7 +434,7 @@ if "observer" in df_full.columns:
     )
     observer_counts.columns = ["Observador", "Registros"]
     observer_counts["Observador"] = observer_counts["Observador"].fillna("(sin datos)")
-    st.dataframe(observer_counts, use_container_width=True, hide_index=True)
+    st.dataframe(observer_counts, use_container_width=True, hide_index=True, height=400)
 
 st.markdown("""
 **Notas sobre la completitud de los datos:**
