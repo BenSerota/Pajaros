@@ -33,7 +33,7 @@ st.title("Panel de Siniestralidad de Avifauna en Líneas Eléctricas — Fuertev
 st.markdown(
     """
     Análisis de la mortalidad de aves causada por colisión y electrocución
-    en líneas eléctricas de **Fuerteventura, Islas Canarias** (2018--2025).
+    en líneas eléctricas de **Fuerteventura, Islas Canarias** (2018--2026).
 
     Fuente de datos: muestreos de campo realizados por **BIOSFERA XXI** en
     líneas de transporte de 66 kV y 132 kV a lo largo de tres corredores
