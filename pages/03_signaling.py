@@ -523,11 +523,24 @@ st.caption(
 )
 
 # Calcular conteos por vano
-span_sig = (
-    df_sig.groupby(["span_id", "signal_type"])
-    .size()
-    .reset_index(name="count")
+span_col = (
+    "vano_label" if "vano_label" in df_sig.columns
+    else "vano_raw_2" if "vano_raw_2" in df_sig.columns
+    else "span_id" if "span_id" in df_sig.columns
+    else None
 )
+
+if span_col is None:
+    st.info("No hay identificador de vano disponible para esta comparacion.")
+    span_sig = pd.DataFrame(columns=["span_id", "signal_type", "count"])
+else:
+    span_sig = (
+        df_sig.dropna(subset=[span_col])
+        .groupby([span_col, "signal_type"])
+        .size()
+        .reset_index(name="count")
+        .rename(columns={span_col: "span_id"})
+    )
 
 col_k1, col_k2 = st.columns([2, 1])
 
@@ -588,10 +601,14 @@ st.caption(
 
 # Preparar datos de regresion: conteos por vano con atributos
 try:
+    if span_col is None:
+        raise KeyError("span identifier")
+
     span_attrs = (
-        df_sig.groupby("span_id")
+        df_sig.dropna(subset=[span_col])
+        .groupby(span_col)
         .agg(
-            count=("span_id", "size"),
+            count=(span_col, "size"),
             signal_type=("signal_type", "first"),
             voltage=("voltage", "first"),
             signal_spacing_m=("signal_spacing_m", "first"),
@@ -599,6 +616,7 @@ try:
             line=("line_label", "first"),
         )
         .reset_index()
+        .rename(columns={span_col: "span_id"})
     )
     span_attrs = span_attrs.dropna(subset=["signal_type"])
 
