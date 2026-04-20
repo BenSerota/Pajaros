@@ -120,6 +120,8 @@ _DIURNAL = {
     "Leptoptilos crumenifer / marabú africano",
     # Egyptian vulture — diurnal raptor/scavenger
     "Neophron percnopterus / alimoche común",
+    # Canarian Egyptian vulture (majorensis ssp.) — diurnal
+    "Neophron percnopterus majorensis / Alimoche canario (Guirre)",
     # Whimbrel — primarily diurnal migrant wader
     "Numenius phaeopus / zarapito trinador",
     # Spanish sparrow — diurnal granivorous passerine

@@ -18,8 +18,12 @@ from config import (
 
 
 def load_raw(filepath: Path) -> pd.DataFrame:
-    """Load the raw XLS file using xlrd (handles old .xls format)."""
-    df = pd.read_excel(filepath, sheet_name="export", engine="xlrd")
+    """Load the raw Excel file (supports both .xls and .xlsx)."""
+    suffix = Path(filepath).suffix.lower()
+    if suffix == ".xls":
+        df = pd.read_excel(filepath, sheet_name="export", engine="xlrd")
+    else:
+        df = pd.read_excel(filepath, sheet_name=0, engine="openpyxl")
     return df
 
 
@@ -33,11 +37,15 @@ def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     # We rename those specifically before applying the general map.
     cols = list(df.columns)
 
-    # Find duplicate Vano columns
+    # Handle Vano columns: old exports had two duplicate "Vano" columns,
+    # newer exports have a single "Vano" column.
     vano_indices = [i for i, c in enumerate(cols) if c.startswith("Vano") and "Completado" not in c]
     if len(vano_indices) >= 2:
         cols[vano_indices[0]] = "vano_raw_1"
         cols[vano_indices[1]] = "vano_raw_2"
+        df.columns = cols
+    elif len(vano_indices) == 1:
+        cols[vano_indices[0]] = "vano_raw_2"
         df.columns = cols
 
     # Apply the general column map
@@ -139,28 +147,30 @@ def normalize_categoricals(df: pd.DataFrame) -> pd.DataFrame:
         .map(SIGNAL_CONDITION_NORM)
     )
 
-    # Municipio
-    df["municipio"] = (
-        df["municipio"]
-        .fillna("")
-        .str.strip()
-        .replace("", np.nan)
-        .map(lambda x: MUNICIPIO_NORM.get(x, x) if pd.notna(x) else x)
-    )
+    # Municipio (not present in newer exports)
+    if "municipio" in df.columns:
+        df["municipio"] = (
+            df["municipio"]
+            .fillna("")
+            .str.strip()
+            .replace("", np.nan)
+            .map(lambda x: MUNICIPIO_NORM.get(x, x) if pd.notna(x) else x)
+        )
 
-    # Paraje normalization (title case, fix known issues)
-    paraje_norm = {
-        "Natural Protegido": "Natural protegido",
-        "RURAL": "Rural",
-        "Interurbana": "Interurbano",
-    }
-    df["paraje"] = (
-        df["paraje"]
-        .fillna("")
-        .str.strip()
-        .replace("", np.nan)
-        .map(lambda x: paraje_norm.get(x, x) if pd.notna(x) else x)
-    )
+    # Paraje normalization (not present in newer exports)
+    if "paraje" in df.columns:
+        paraje_norm = {
+            "Natural Protegido": "Natural protegido",
+            "RURAL": "Rural",
+            "Interurbana": "Interurbano",
+        }
+        df["paraje"] = (
+            df["paraje"]
+            .fillna("")
+            .str.strip()
+            .replace("", np.nan)
+            .map(lambda x: paraje_norm.get(x, x) if pd.notna(x) else x)
+        )
 
     # Boolean columns
     bool_map = {"Sí": True, "No": False}
@@ -173,14 +183,15 @@ def normalize_categoricals(df: pd.DataFrame) -> pd.DataFrame:
                 .map(bool_map)
             )
 
-    # Provincia normalization
-    df["provincia"] = (
-        df["provincia"]
-        .fillna("")
-        .str.strip()
-        .replace("", np.nan)
-        .map(lambda x: "Las Palmas" if pd.notna(x) else x)
-    )
+    # Provincia normalization (not present in newer exports)
+    if "provincia" in df.columns:
+        df["provincia"] = (
+            df["provincia"]
+            .fillna("")
+            .str.strip()
+            .replace("", np.nan)
+            .map(lambda x: "Las Palmas" if pd.notna(x) else x)
+        )
 
     return df
 
@@ -337,8 +348,9 @@ if __name__ == "__main__":
     print(f"\nSignal type distribution:")
     print(df["signal_type"].value_counts(dropna=False))
 
-    print(f"\nMunicipio distribution:")
-    print(df["municipio"].value_counts(dropna=False))
+    if "municipio" in df.columns:
+        print(f"\nMunicipio distribution:")
+        print(df["municipio"].value_counts(dropna=False))
 
     print(f"\nConservation score distribution:")
     print(df["conservation_score"].describe())

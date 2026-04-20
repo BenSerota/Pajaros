@@ -13,7 +13,7 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 GEO_DIR = DATA_DIR / "geo"
 
-RAW_XLS = RAW_DIR / "Victimas_LE_FV_hasta_sep2025.xls"
+RAW_XLS = RAW_DIR / "Info_colisiones_SACORP_hasta_0326.xlsx"
 CLEAN_PARQUET = PROCESSED_DIR / "casualties_clean.parquet"
 SPECIES_PARQUET = PROCESSED_DIR / "species_lookup.parquet"
 ROAD_DISTANCES_PARQUET = PROCESSED_DIR / "road_distances.parquet"
@@ -103,15 +103,14 @@ COLUMN_MAP = {
 
 # Columns to keep after renaming (drop unused)
 COLUMNS_KEEP = [
-    "company", "study", "line", "event_type", "causante", "impact_type",
-    "date", "date_local", "tipologia", "provincia", "municipio", "paraje",
-    "observer", "vano_raw_2", "span_id", "nearest_pylon", "remains_position",
+    "study", "line", "event_type", "causante",
+    "date",
+    "observer", "vano_raw_2", "nearest_pylon", "remains_position",
     "utm_x", "utm_y", "coord_system",
     "observer_distance_m", "relative_size",
-    "signal_spacing_m", "signal_condition", "accident_zone",
+    "signal_spacing_m", "signal_condition",
     "is_collision", "has_signaling", "signal_type",
-    "electrocution", "other_cause", "victim_cause",
-    "species_raw", "specimen_count", "euring_code",
+    "species_raw", "euring_code",
     "iucn_status", "spanish_catalog", "regional_catalog",
     "is_focal", "unknown_species_desc",
     "sex", "age", "remains_type", "remains_state", "remains_age",
@@ -125,8 +124,9 @@ SIGNAL_TYPE_NORM = {
     "Espirales  Amarillas": "Espirales Amarillas",  # double space in raw
     "Espirales": "Espirales Amarillas",              # merge single record
     "Sin Señalización": "Sin Señalización",
+    "Tiras en X": "Tiras en X",
 }
-SIGNAL_TYPES_ORDERED = ["Triple Aspa", "Aspa Corta", "Espirales Amarillas", "Sin Señalización", "UV (Ultravioleta)"]
+SIGNAL_TYPES_ORDERED = ["Triple Aspa", "Aspa Corta", "Espirales Amarillas", "Tiras en X", "Sin Señalización", "UV (Ultravioleta)"]
 
 # ── Signal Condition ─────────────────────────────────────────────────────────
 SIGNAL_CONDITION_NORM = {
@@ -302,4 +302,4 @@ CHART_HEIGHT = 450
 CHART_FONT_FAMILY = "Inter, system-ui, -apple-system, sans-serif"
 CHART_BG = "rgba(0,0,0,0)"
 CHART_TEMPLATE = "plotly_white"
-SOURCE_ANNOTATION = "Datos: BIOSFERA XXI, 2018–2025"
+SOURCE_ANNOTATION = "Datos: BIOSFERA XXI, 2018–2026"
