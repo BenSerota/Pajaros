@@ -131,3 +131,16 @@ with st.expander("Resumen de calidad de datos"):
         | Registros con información de señalización | {signal_known:,} | {signal_known/total*100:.0f}% |
         """
     )
+
+with st.expander("Notas sobre la actualización de datos (abril 2026)"):
+    st.markdown(
+        """
+        **Fuente**: `Info_colisiones_SACORP_hasta_0326.xlsx` (sustituye `Victimas_LE_FV_hasta_sep2025.xls`).
+
+        **Añadido**: +58 registros nuevos (oct 2025 -- abr 2026). Todos los registros anteriores se conservan sin modificaciones.
+
+        **Nuevo en clasificadores**: tipo de señalización *Tiras en X* (1 registro); especie *Neophron percnopterus majorensis* (Guirre).
+
+        **Columnas eliminadas por el proveedor**: municipio, paraje, provincia, tipo de impacto, electrocución, causa de la víctima, cantidad de ejemplares, entre otras (24 en total). Estas variables ya no están disponibles para filtrado ni análisis.
+        """
+    )
